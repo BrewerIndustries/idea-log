@@ -1,0 +1,19 @@
+[Unit]
+Description=Idea Log (Next.js) — DEV
+After=network.target
+
+[Service]
+Type=simple
+User=dan
+WorkingDirectory=/opt/idea-log-dev
+Environment=NODE_ENV=production
+# Dev has its own .env (separate JARVIS_TOKEN, JARVIS_ENV=dev, and an isolated
+# SQLite DB at /opt/idea-log-dev/data/ideas.db).
+EnvironmentFile=/opt/idea-log-dev/.env
+# next directly so we override the start script's hardcoded :4660; dev = :4670.
+ExecStart=/opt/idea-log-dev/node_modules/.bin/next start -p 4670
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

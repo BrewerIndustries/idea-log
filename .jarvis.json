@@ -1,0 +1,7 @@
+{
+  "id": "idea-log",
+  "name": "Idea Log",
+  "category": "standalone",
+  "status": { "prod": "live", "dev": "live" },
+  "deploy": { "prod": { "port": 4660 }, "dev": { "port": 4670 } }
+}
