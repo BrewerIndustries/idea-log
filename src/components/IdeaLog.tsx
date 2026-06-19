@@ -6,6 +6,7 @@ import IdeaCard from "./IdeaCard";
 import IdeaEditor from "./IdeaEditor";
 
 const TOKEN_KEY = "idea-log-token";
+const VIEW_KEY = "idea-log-view";
 
 function payloadFrom(d: Idea) {
   return {
@@ -29,9 +30,12 @@ export default function IdeaLog({ env }: { env?: string | null }) {
   const [stageFilter, setStageFilter] = useState<Stage | "">("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Idea | null>(null);
+  const [view, setView] = useState<"list" | "cards">("list");
 
   useEffect(() => {
     setToken(localStorage.getItem(TOKEN_KEY) ?? "");
+    const stored = localStorage.getItem(VIEW_KEY);
+    if (stored === "list" || stored === "cards") setView(stored);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -53,6 +57,11 @@ export default function IdeaLog({ env }: { env?: string | null }) {
   const saveToken = (v: string) => {
     setToken(v);
     localStorage.setItem(TOKEN_KEY, v);
+  };
+
+  const switchView = (v: "list" | "cards") => {
+    setView(v);
+    localStorage.setItem(VIEW_KEY, v);
   };
 
   const headers = useCallback(
@@ -138,7 +147,7 @@ export default function IdeaLog({ env }: { env?: string | null }) {
     <>
       {env && <div className="env-banner">⚠ {env} environment — not production</div>}
 
-      <div className="wrap">
+      <div className={view === "cards" ? "wrap wrap--wide" : "wrap"}>
         <div className="log-header">
           <span style={{ fontSize: 22 }}>💡</span>
           <span className="log-title">Idea log</span>
@@ -173,6 +182,14 @@ export default function IdeaLog({ env }: { env?: string | null }) {
               </button>
             ))}
           </div>
+          <div className="view-toggle">
+            <button className="chip-toggle" data-on={view === "list"} onClick={() => switchView("list")} title="List view">
+              ☰ List
+            </button>
+            <button className="chip-toggle" data-on={view === "cards"} onClick={() => switchView("cards")} title="Card grid">
+              ⊞ Cards
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -181,6 +198,12 @@ export default function IdeaLog({ env }: { env?: string | null }) {
           <p className="empty">
             {ideas.length === 0 ? "No ideas yet — capture your first one." : "No ideas match your filter."}
           </p>
+        ) : view === "cards" ? (
+          <div className="ideas-grid">
+            {filtered.map((idea) => (
+              <IdeaCard key={idea.id} idea={idea} onEdit={openEdit} onDelete={remove} onTogglePin={togglePin} />
+            ))}
+          </div>
         ) : (
           filtered.map((idea) => (
             <IdeaCard key={idea.id} idea={idea} onEdit={openEdit} onDelete={remove} onTogglePin={togglePin} />
