@@ -39,29 +39,31 @@ export default function IdeaCard({
         </div>
       </div>
 
-      {idea.tags.length > 0 && (
-        <div className="tags">
-          {idea.tags.map((t, i) => {
-            const a = ACCENT[tagAccent(t)];
-            return (
-              <span key={i} className="tag" style={{ background: a.bg, color: a.fg, borderColor: a.border }}>
-                {t}
-              </span>
-            );
-          })}
-        </div>
-      )}
+      <div className="card-body">
+        {idea.tags.length > 0 && (
+          <div className="tags">
+            {idea.tags.map((t, i) => {
+              const a = ACCENT[tagAccent(t)];
+              return (
+                <span key={i} className="tag" style={{ background: a.bg, color: a.fg, borderColor: a.border }}>
+                  {t}
+                </span>
+              );
+            })}
+          </div>
+        )}
 
-      {idea.concept && (
-        <>
-          <div className="section-label">Concept</div>
-          <p className="desc">{idea.concept}</p>
-        </>
-      )}
+        {idea.concept && (
+          <>
+            <div className="section-label">Concept</div>
+            <p className="desc">{idea.concept}</p>
+          </>
+        )}
 
-      {idea.sections.map((block, i) => (
-        <BlockView key={i} block={block} />
-      ))}
+        {idea.sections.map((block, i) => (
+          <BlockView key={i} block={block} />
+        ))}
+      </div>
     </article>
   );
 }
