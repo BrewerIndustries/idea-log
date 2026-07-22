@@ -43,9 +43,15 @@ ssh dan@100.102.159.57 /opt/idea-log/deploy/update.sh           # → MAIN (:466
 - Header: `title`, `subtitle`, `icon` (emoji), `accent` (palette key), `stage`
   (`seed|exploring|building|shipped|shelved`), `pinned`, `concept`.
 - `tags`: JSON `string[]`; chip colour is derived by hashing the label (no colour stored).
-- `sections`: JSON ordered `Block[]`. Four block types generalise the reference's
+- `sections`: JSON ordered `Block[]`. Five block types generalise the reference's
   sections: `grid` (name+desc cards), `phases` (dot+name+text), `list` (callout box with
-  a `tone`), `links` (label+url). The editor is "add block → pick type".
+  a `tone`), `links` (label+url), `doc` (markdown note). The editor is "add block → pick type".
+- `attachments`: JSON `Attachment[]` (`{id,name,mime,size,key}`). Bytes live in Cloudflare
+  R2 (`src/lib/storage.ts`, `aws4fetch`), served via `/api/attachments/<key>` (proxied, no
+  public bucket). Column added by an in-code migration in `db.ts` init(). Keys prefixed
+  `dev/` vs `prod/`. Needs `R2_*` env vars; absent → uploads 503, rest of app unaffected.
+- `doc` blocks render via `src/components/Markdown.tsx` — a small dependency-free renderer
+  (React nodes, no `dangerouslySetInnerHTML`).
 - Sort: `pinned DESC, updatedAt DESC`. A fresh/empty DB is **seeded** with the five
   reference ideas (`src/lib/seed.ts`); deletable.
 

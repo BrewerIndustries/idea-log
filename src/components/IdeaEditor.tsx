@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ACCENT,
   ACCENT_KEYS,
   BLOCK_LABEL,
   STAGES,
   STAGE_LABEL,
+  formatBytes,
+  isImageMime,
   type AccentKey,
+  type Attachment,
   type Block,
   type BlockType,
   type Idea,
@@ -23,6 +26,7 @@ const BLANK: Idea = {
   concept: "",
   tags: [],
   sections: [],
+  attachments: [],
   pinned: false,
   createdAt: "",
   updatedAt: "",
@@ -38,22 +42,28 @@ function emptyBlock(type: BlockType): Block {
       return { type, label: "", tone: "rose", items: [""] };
     case "links":
       return { type, label: "", items: [{ label: "", url: "" }] };
+    case "doc":
+      return { type, label: "", text: "" };
   }
 }
 
 export default function IdeaEditor({
   initial,
   onSave,
+  onUpload,
   onClose,
 }: {
   initial: Idea | null;
   onSave: (draft: Idea) => Promise<void>;
+  onUpload: (file: File) => Promise<Attachment>;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<Idea>(initial ?? BLANK);
   const [tagInput, setTagInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const set = <K extends keyof Idea>(key: K, value: Idea[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
@@ -79,6 +89,26 @@ export default function IdeaEditor({
     if (t && !draft.tags.includes(t)) set("tags", [...draft.tags, t]);
     setTagInput("");
   };
+
+  const uploadFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    setErr("");
+    try {
+      for (const file of Array.from(files)) {
+        const att = await onUpload(file);
+        setDraft((d) => ({ ...d, attachments: [...d.attachments, att] }));
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const removeAttachment = (id: string) =>
+    set("attachments", draft.attachments.filter((a) => a.id !== id));
 
   const save = async () => {
     if (!draft.title.trim()) {
@@ -262,13 +292,52 @@ export default function IdeaEditor({
 
               <div className="add-block">
                 <span className="hint">Add section:</span>
-                {(["grid", "phases", "list", "links"] as BlockType[]).map((t) => (
+                {(["grid", "phases", "list", "links", "doc"] as BlockType[]).map((t) => (
                   <button key={t} type="button" className="btn btn-sm" onClick={() => addBlock(t)}>
                     + {BLOCK_LABEL[t]}
                   </button>
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="field">
+            <label className="field-label">Attachments</label>
+            {draft.attachments.length > 0 && (
+              <div className="attach-editor">
+                {draft.attachments.map((a) => (
+                  <div className="attach-chip" key={a.id}>
+                    {isImageMime(a.mime) ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img className="attach-chip-thumb" src={`/api/attachments/${a.key}`} alt={a.name} />
+                    ) : (
+                      <span className="attach-chip-icon">📎</span>
+                    )}
+                    <span className="attach-chip-name" title={a.name}>{a.name}</span>
+                    <span className="attach-chip-size">{formatBytes(a.size)}</span>
+                    <button
+                      type="button"
+                      className="icon-btn danger"
+                      title="Remove attachment"
+                      onClick={() => removeAttachment(a.id)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              className="attach-input"
+              onChange={(e) => uploadFiles(e.target.files)}
+              disabled={uploading}
+            />
+            <span className="hint">
+              {uploading ? "Uploading…" : "Images, PDFs, notes — up to 25 MB each. Stored in R2; needs your token."}
+            </span>
           </div>
 
           {err && <div className="warn">{err}</div>}
@@ -301,6 +370,21 @@ function tagStyle(label: string) {
 // --- per-type block editors --------------------------------------------------
 
 function BlockEditor({ block, onChange }: { block: Block; onChange: (b: Block) => void }) {
+  if (block.type === "doc") {
+    return (
+      <div className="block-rows">
+        <textarea
+          className="textarea"
+          style={{ minHeight: 120, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5 }}
+          value={block.text}
+          onChange={(e) => onChange({ ...block, text: e.target.value })}
+          placeholder={"Markdown supported — # headings, **bold**, *italic*, `code`, - lists, [links](url), > quotes"}
+        />
+        <span className="hint">Markdown: headings, bold/italic, lists, code, links, quotes.</span>
+      </div>
+    );
+  }
+
   if (block.type === "grid") {
     const set = (i: number, patch: Partial<{ name: string; desc: string }>) =>
       onChange({ ...block, items: block.items.map((it, j) => (j === i ? { ...it, ...patch } : it)) });

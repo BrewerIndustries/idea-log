@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { STAGES, STAGE_LABEL, type Idea, type Stage } from "@/lib/types";
+import { STAGES, STAGE_LABEL, type Attachment, type Idea, type Stage } from "@/lib/types";
 import IdeaCard from "./IdeaCard";
 import IdeaEditor from "./IdeaEditor";
 
@@ -18,6 +18,7 @@ function payloadFrom(d: Idea) {
     concept: d.concept,
     tags: d.tags,
     sections: d.sections,
+    attachments: d.attachments,
     pinned: d.pinned,
   };
 }
@@ -91,6 +92,31 @@ export default function IdeaLog({ env }: { env?: string | null }) {
       await refresh();
     },
     [headers, refresh],
+  );
+
+  // Upload a file for the editor; returns the Attachment metadata to attach.
+  const uploadFile = useCallback(
+    async (file: File): Promise<Attachment> => {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/attachments", {
+        method: "POST",
+        headers: token ? { "x-jarvis-token": token } : {},
+        body,
+      });
+      if (!res.ok) {
+        const msg =
+          res.status === 401
+            ? "Unauthorized — set your token with the 🔑 button (bottom-right)."
+            : res.status === 503
+              ? "File storage isn't configured on the server yet."
+              : `Upload failed (${res.status}).`;
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      return data.attachment as Attachment;
+    },
+    [token],
   );
 
   const remove = useCallback(
@@ -213,7 +239,9 @@ export default function IdeaLog({ env }: { env?: string | null }) {
 
       <TokenBar token={token} onSave={saveToken} />
 
-      {editorOpen && <IdeaEditor initial={editing} onSave={createOrUpdate} onClose={closeEditor} />}
+      {editorOpen && (
+        <IdeaEditor initial={editing} onSave={createOrUpdate} onUpload={uploadFile} onClose={closeEditor} />
+      )}
     </>
   );
 }

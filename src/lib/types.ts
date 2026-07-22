@@ -72,7 +72,7 @@ export function stageOf(value: unknown): Stage {
 // these four repeatable block types. An idea holds an ordered list of them, so
 // any idea can have any number and order of sections.
 
-export const BLOCK_TYPES = ["grid", "phases", "list", "links"] as const;
+export const BLOCK_TYPES = ["grid", "phases", "list", "links", "doc"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export const BLOCK_LABEL: Record<BlockType, string> = {
@@ -80,6 +80,7 @@ export const BLOCK_LABEL: Record<BlockType, string> = {
   phases: "Phases",
   list: "Callout list",
   links: "Links",
+  doc: "Note (markdown)",
 };
 
 export interface GridItem { name: string; desc: string }
@@ -90,7 +91,34 @@ export type Block =
   | { type: "grid"; label: string; items: GridItem[] }
   | { type: "phases"; label: string; items: PhaseItem[] }
   | { type: "list"; label: string; tone?: AccentKey; items: string[] }
-  | { type: "links"; label: string; items: LinkItem[] };
+  | { type: "links"; label: string; items: LinkItem[] }
+  | { type: "doc"; label: string; text: string };
+
+// ---- attachments ------------------------------------------------------------
+// Files (images / PDFs / md notes / anything) attached to an idea. Bytes live in
+// object storage (Cloudflare R2); the DB only holds this metadata. `key` is the
+// storage object key; the file is served (and thumbnailed) via /api/attachments.
+
+export interface Attachment {
+  id: string;
+  name: string; // original filename, for display + download
+  mime: string; // content type, e.g. "image/png"
+  size: number; // bytes
+  key: string; // storage object key (never user-facing on its own)
+}
+
+export function isImageMime(mime: string): boolean {
+  return typeof mime === "string" && mime.startsWith("image/");
+}
+
+/** Human-readable file size, e.g. "1.4 MB". */
+export function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
+  const v = n / 1024 ** i;
+  return `${v >= 10 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+}
 
 // ---- the idea ---------------------------------------------------------------
 
@@ -104,6 +132,7 @@ export interface Idea {
   concept: string;
   tags: string[];
   sections: Block[];
+  attachments: Attachment[];
   pinned: boolean;
   createdAt: string;
   updatedAt: string;

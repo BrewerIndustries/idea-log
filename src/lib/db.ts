@@ -8,6 +8,7 @@ import {
   accentOf,
   stageOf,
   type AccentKey,
+  type Attachment,
   type Block,
   type Idea,
 } from "./types";
@@ -42,6 +43,13 @@ function init(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_ideas_updated ON ideas(updatedAt);
   `);
 
+  // Migration: add the attachments column to databases created before it existed.
+  // (SQLite has no ADD COLUMN IF NOT EXISTS, so probe the schema first.)
+  const cols = db.prepare(`PRAGMA table_info(ideas)`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === "attachments")) {
+    db.exec(`ALTER TABLE ideas ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]'`);
+  }
+
   // Seed the reference ideas into a brand-new database so a fresh deploy looks
   // alive. Every seeded idea is editable/deletable like any other.
   const { n } = db.prepare(`SELECT COUNT(*) AS n FROM ideas`).get() as { n: number };
@@ -67,6 +75,7 @@ interface Row {
   concept: string | null;
   tags: string;
   sections: string;
+  attachments: string;
   pinned: number;
   createdAt: string;
   updatedAt: string;
@@ -107,7 +116,9 @@ function sanitizeBlocks(v: unknown): Block[] {
     const label = trimmed(b.label);
     const items = Array.isArray(b.items) ? b.items : [];
 
-    if (b.type === "grid") {
+    if (b.type === "doc") {
+      out.push({ type: "doc", label, text: str(b.text) });
+    } else if (b.type === "grid") {
       out.push({
         type: "grid",
         label,
@@ -154,6 +165,28 @@ function sanitizeBlocks(v: unknown): Block[] {
   return out;
 }
 
+/** Validate untrusted attachment metadata (from the API or from stored JSON). */
+function sanitizeAttachments(v: unknown): Attachment[] {
+  if (!Array.isArray(v)) return [];
+  const out: Attachment[] = [];
+  for (const raw of v) {
+    if (!raw || typeof raw !== "object") continue;
+    const o = raw as Record<string, unknown>;
+    const id = trimmed(o.id);
+    const key = trimmed(o.key);
+    if (!id || !key) continue; // both are set server-side on upload; skip malformed
+    const size = typeof o.size === "number" && Number.isFinite(o.size) ? Math.max(0, Math.floor(o.size)) : 0;
+    out.push({
+      id,
+      key,
+      name: trimmed(o.name) || "file",
+      mime: trimmed(o.mime) || "application/octet-stream",
+      size,
+    });
+  }
+  return out.slice(0, 50);
+}
+
 function rowToIdea(row: Row): Idea {
   return {
     id: row.id,
@@ -165,6 +198,7 @@ function rowToIdea(row: Row): Idea {
     concept: row.concept ?? "",
     tags: sanitizeTags(parseJson(row.tags)),
     sections: sanitizeBlocks(parseJson(row.sections)),
+    attachments: sanitizeAttachments(parseJson(row.attachments)),
     pinned: row.pinned === 1,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -182,6 +216,7 @@ function rowFromIdea(idea: Idea) {
     concept: idea.concept || null,
     tags: JSON.stringify(idea.tags),
     sections: JSON.stringify(idea.sections),
+    attachments: JSON.stringify(idea.attachments),
     pinned: idea.pinned ? 1 : 0,
     createdAt: idea.createdAt,
     updatedAt: idea.updatedAt,
@@ -189,8 +224,8 @@ function rowFromIdea(idea: Idea) {
 }
 
 const INSERT = `INSERT INTO ideas
-  (id, title, subtitle, icon, accent, stage, concept, tags, sections, pinned, createdAt, updatedAt)
-  VALUES (@id, @title, @subtitle, @icon, @accent, @stage, @concept, @tags, @sections, @pinned, @createdAt, @updatedAt)`;
+  (id, title, subtitle, icon, accent, stage, concept, tags, sections, attachments, pinned, createdAt, updatedAt)
+  VALUES (@id, @title, @subtitle, @icon, @accent, @stage, @concept, @tags, @sections, @attachments, @pinned, @createdAt, @updatedAt)`;
 
 // --- public API --------------------------------------------------------------
 
@@ -203,6 +238,7 @@ export interface IdeaInput {
   concept?: unknown;
   tags?: unknown;
   sections?: unknown;
+  attachments?: unknown;
   pinned?: unknown;
 }
 
@@ -221,6 +257,7 @@ export function createIdea(input: IdeaInput): Idea | null {
     concept: trimmed(input.concept),
     tags: sanitizeTags(input.tags),
     sections: sanitizeBlocks(input.sections),
+    attachments: sanitizeAttachments(input.attachments),
     pinned: Boolean(input.pinned),
     createdAt: now,
     updatedAt: now,
@@ -255,14 +292,15 @@ export function updateIdea(id: string, patch: IdeaInput): Idea | null {
     concept: patch.concept !== undefined ? trimmed(patch.concept) : existing.concept,
     tags: patch.tags !== undefined ? sanitizeTags(patch.tags) : existing.tags,
     sections: patch.sections !== undefined ? sanitizeBlocks(patch.sections) : existing.sections,
+    attachments: patch.attachments !== undefined ? sanitizeAttachments(patch.attachments) : existing.attachments,
     pinned: patch.pinned !== undefined ? Boolean(patch.pinned) : existing.pinned,
     updatedAt: new Date().toISOString(),
   };
   getDb()
     .prepare(
       `UPDATE ideas SET title=@title, subtitle=@subtitle, icon=@icon, accent=@accent,
-        stage=@stage, concept=@concept, tags=@tags, sections=@sections, pinned=@pinned,
-        updatedAt=@updatedAt WHERE id=@id`,
+        stage=@stage, concept=@concept, tags=@tags, sections=@sections, attachments=@attachments,
+        pinned=@pinned, updatedAt=@updatedAt WHERE id=@id`,
     )
     .run(rowFromIdea(next));
   return next;
@@ -287,6 +325,7 @@ function seed(db: Database.Database) {
     concept: trimmed(s.concept),
     tags: sanitizeTags(s.tags),
     sections: sanitizeBlocks(s.sections),
+    attachments: [],
     pinned: Boolean(s.pinned),
     createdAt: new Date(now).toISOString(),
     // Stagger updatedAt so the list keeps the reference's order (first = top).
