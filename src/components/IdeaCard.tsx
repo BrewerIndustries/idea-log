@@ -33,6 +33,18 @@ export default function IdeaCard({
           <div className="card-name">{idea.title}</div>
           {idea.subtitle && <div className="card-sub">{idea.subtitle}</div>}
           <span className={`stage-chip stage-${idea.stage}`}>{STAGE_LABEL[idea.stage]}</span>
+          {idea.stage === "graduated" && idea.repo && (
+            <a
+              className="repo-link"
+              style={{ marginLeft: 6 }}
+              href={idea.repo.startsWith("http") ? idea.repo : `https://github.com/BrewerIndustries/${idea.repo}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Now a project — tracked on the Dashboard"
+            >
+              ↗ {idea.repo.replace(/^https?:\/\//, "").replace(/\/+$/, "")}
+            </a>
+          )}
         </div>
         <div className="card-actions">
           <button

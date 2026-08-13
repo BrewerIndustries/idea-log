@@ -49,18 +49,23 @@ export function tagAccent(label: string): AccentKey {
 
 // ---- stages -----------------------------------------------------------------
 
-export const STAGES = ["seed", "exploring", "building", "shipped", "shelved"] as const;
+// Idea Log tracks the PRE-PROJECT lifecycle only. Once an idea becomes a real
+// project (a repo/deploy), it "graduates" — the Dashboard then owns its status
+// (live/in_progress/mothballed), so we don't double-track "building/shipped" here.
+// Legacy "building"/"shipped" rows map to "graduated" (see stageOf + the db migration).
+export const STAGES = ["seed", "exploring", "graduated", "shelved"] as const;
 export type Stage = (typeof STAGES)[number];
 
 export const STAGE_LABEL: Record<Stage, string> = {
   seed: "Seed",
   exploring: "Exploring",
-  building: "Building",
-  shipped: "Shipped",
+  graduated: "Graduated",
   shelved: "Shelved",
 };
 
 export function stageOf(value: unknown): Stage {
+  // Fold the old "became a project" stages into "graduated".
+  if (value === "building" || value === "shipped") return "graduated";
   return typeof value === "string" && (STAGES as readonly string[]).includes(value)
     ? (value as Stage)
     : "seed";
@@ -129,6 +134,7 @@ export interface Idea {
   icon: string; // emoji
   accent: AccentKey;
   stage: Stage;
+  repo: string; // when graduated: the repo/dashboard it handed off to (name or URL). "" otherwise.
   concept: string;
   tags: string[];
   sections: Block[];

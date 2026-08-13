@@ -23,6 +23,7 @@ const BLANK: Idea = {
   icon: "💡",
   accent: "blue",
   stage: "seed",
+  repo: "",
   concept: "",
   tags: [],
   sections: [],
@@ -216,6 +217,18 @@ export default function IdeaEditor({
               </button>
             </div>
           </div>
+
+          {draft.stage === "graduated" && (
+            <div className="field">
+              <label className="field-label">Graduated to — repo or link</label>
+              <input
+                className="input"
+                value={draft.repo ?? ""}
+                onChange={(e) => set("repo", e.target.value)}
+                placeholder="e.g. sinkhole   ·   or   https://…"
+              />
+            </div>
+          )}
 
           <div className="field">
             <label className="field-label">Concept</label>

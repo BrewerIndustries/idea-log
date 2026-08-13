@@ -49,6 +49,14 @@ function init(): Database.Database {
   if (!cols.some((c) => c.name === "attachments")) {
     db.exec(`ALTER TABLE ideas ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]'`);
   }
+  // `repo`: when an idea graduates to a real project, the repo/dashboard it handed
+  // off to (name or URL). Added after the original schema.
+  if (!cols.some((c) => c.name === "repo")) {
+    db.exec(`ALTER TABLE ideas ADD COLUMN repo TEXT NOT NULL DEFAULT ''`);
+  }
+  // Idea Log no longer tracks "building"/"shipped" — once an idea becomes a project
+  // the Dashboard owns its status. Fold any legacy rows into "graduated".
+  db.exec(`UPDATE ideas SET stage='graduated' WHERE stage IN ('building','shipped')`);
 
   // Seed the reference ideas into a brand-new database so a fresh deploy looks
   // alive. Every seeded idea is editable/deletable like any other.
@@ -72,6 +80,7 @@ interface Row {
   icon: string | null;
   accent: string;
   stage: string;
+  repo: string;
   concept: string | null;
   tags: string;
   sections: string;
@@ -195,6 +204,7 @@ function rowToIdea(row: Row): Idea {
     icon: row.icon ?? "💡",
     accent: accentOf(row.accent),
     stage: stageOf(row.stage),
+    repo: str(row.repo),
     concept: row.concept ?? "",
     tags: sanitizeTags(parseJson(row.tags)),
     sections: sanitizeBlocks(parseJson(row.sections)),
@@ -213,6 +223,7 @@ function rowFromIdea(idea: Idea) {
     icon: idea.icon || null,
     accent: idea.accent,
     stage: idea.stage,
+    repo: idea.repo || "",
     concept: idea.concept || null,
     tags: JSON.stringify(idea.tags),
     sections: JSON.stringify(idea.sections),
@@ -224,8 +235,8 @@ function rowFromIdea(idea: Idea) {
 }
 
 const INSERT = `INSERT INTO ideas
-  (id, title, subtitle, icon, accent, stage, concept, tags, sections, attachments, pinned, createdAt, updatedAt)
-  VALUES (@id, @title, @subtitle, @icon, @accent, @stage, @concept, @tags, @sections, @attachments, @pinned, @createdAt, @updatedAt)`;
+  (id, title, subtitle, icon, accent, stage, repo, concept, tags, sections, attachments, pinned, createdAt, updatedAt)
+  VALUES (@id, @title, @subtitle, @icon, @accent, @stage, @repo, @concept, @tags, @sections, @attachments, @pinned, @createdAt, @updatedAt)`;
 
 // --- public API --------------------------------------------------------------
 
@@ -235,6 +246,7 @@ export interface IdeaInput {
   icon?: unknown;
   accent?: unknown;
   stage?: unknown;
+  repo?: unknown;
   concept?: unknown;
   tags?: unknown;
   sections?: unknown;
@@ -254,6 +266,7 @@ export function createIdea(input: IdeaInput): Idea | null {
     icon: trimmed(input.icon) || "💡",
     accent: accentOf(input.accent),
     stage: stageOf(input.stage),
+    repo: trimmed(input.repo),
     concept: trimmed(input.concept),
     tags: sanitizeTags(input.tags),
     sections: sanitizeBlocks(input.sections),
@@ -289,6 +302,7 @@ export function updateIdea(id: string, patch: IdeaInput): Idea | null {
     icon: patch.icon !== undefined ? trimmed(patch.icon) || "💡" : existing.icon,
     accent: patch.accent !== undefined ? accentOf(patch.accent) : existing.accent,
     stage: patch.stage !== undefined ? stageOf(patch.stage) : existing.stage,
+    repo: patch.repo !== undefined ? trimmed(patch.repo) : existing.repo,
     concept: patch.concept !== undefined ? trimmed(patch.concept) : existing.concept,
     tags: patch.tags !== undefined ? sanitizeTags(patch.tags) : existing.tags,
     sections: patch.sections !== undefined ? sanitizeBlocks(patch.sections) : existing.sections,
@@ -299,7 +313,7 @@ export function updateIdea(id: string, patch: IdeaInput): Idea | null {
   getDb()
     .prepare(
       `UPDATE ideas SET title=@title, subtitle=@subtitle, icon=@icon, accent=@accent,
-        stage=@stage, concept=@concept, tags=@tags, sections=@sections, attachments=@attachments,
+        stage=@stage, repo=@repo, concept=@concept, tags=@tags, sections=@sections, attachments=@attachments,
         pinned=@pinned, updatedAt=@updatedAt WHERE id=@id`,
     )
     .run(rowFromIdea(next));
@@ -322,6 +336,7 @@ function seed(db: Database.Database) {
     icon: trimmed(s.icon) || "💡",
     accent: accentOf(s.accent),
     stage: stageOf(s.stage),
+    repo: trimmed((s as { repo?: unknown }).repo),
     concept: trimmed(s.concept),
     tags: sanitizeTags(s.tags),
     sections: sanitizeBlocks(s.sections),
