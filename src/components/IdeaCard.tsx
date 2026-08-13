@@ -1,4 +1,16 @@
-import { ACCENT, STAGE_LABEL, tagAccent, type Block, type Idea } from "@/lib/types";
+import {
+  ACCENT,
+  STAGE_LABEL,
+  tagAccent,
+  formatBytes,
+  isImageMime,
+  type Attachment,
+  type Block,
+  type Idea,
+} from "@/lib/types";
+import Markdown from "./Markdown";
+
+const attachmentHref = (a: Attachment) => `/api/attachments/${a.key}`;
 
 export default function IdeaCard({
   idea,
@@ -21,6 +33,18 @@ export default function IdeaCard({
           <div className="card-name">{idea.title}</div>
           {idea.subtitle && <div className="card-sub">{idea.subtitle}</div>}
           <span className={`stage-chip stage-${idea.stage}`}>{STAGE_LABEL[idea.stage]}</span>
+          {idea.stage === "graduated" && idea.repo && (
+            <a
+              className="repo-link"
+              style={{ marginLeft: 6 }}
+              href={idea.repo.startsWith("http") ? idea.repo : `https://github.com/BrewerIndustries/${idea.repo}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Now a project — tracked on the Dashboard"
+            >
+              ↗ {idea.repo.replace(/^https?:\/\//, "").replace(/\/+$/, "")}
+            </a>
+          )}
         </div>
         <div className="card-actions">
           <button
@@ -63,12 +87,62 @@ export default function IdeaCard({
         {idea.sections.map((block, i) => (
           <BlockView key={i} block={block} />
         ))}
+
+        {idea.attachments.length > 0 && <Attachments items={idea.attachments} />}
       </div>
     </article>
   );
 }
 
+function Attachments({ items }: { items: Attachment[] }) {
+  const images = items.filter((a) => isImageMime(a.mime));
+  const files = items.filter((a) => !isImageMime(a.mime));
+  return (
+    <>
+      <div className="section-label">Attachments</div>
+      {images.length > 0 && (
+        <div className="attach-grid">
+          {images.map((a) => (
+            <a
+              key={a.id}
+              className="attach-thumb"
+              href={attachmentHref(a)}
+              target="_blank"
+              rel="noreferrer"
+              title={a.name}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={attachmentHref(a)} alt={a.name} loading="lazy" />
+            </a>
+          ))}
+        </div>
+      )}
+      {files.length > 0 && (
+        <div className="attach-files">
+          {files.map((a) => (
+            <a key={a.id} className="attach-file" href={attachmentHref(a)} target="_blank" rel="noreferrer">
+              <span className="attach-file-icon">📎</span>
+              <span className="attach-file-name">{a.name}</span>
+              <span className="attach-file-size">{formatBytes(a.size)}</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function BlockView({ block }: { block: Block }) {
+  if (block.type === "doc") {
+    if (!block.text.trim()) return null;
+    return (
+      <>
+        {block.label && <div className="section-label">{block.label}</div>}
+        <Markdown text={block.text} />
+      </>
+    );
+  }
+
   if (block.type === "grid") {
     return (
       <>
